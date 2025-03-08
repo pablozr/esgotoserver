@@ -1,0 +1,3 @@
+name: esgotoserver
+version: '${project.version}'
+main: org.esg.Main
