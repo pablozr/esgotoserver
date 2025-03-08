@@ -17,6 +17,11 @@
       <option name="url" value="https://hub.spigotmc.org/nexus/content/repositories/snapshots/" />
     </remote-repository>
     <remote-repository>
+      <option name="id" value="codemc-repo" />
+      <option name="name" value="codemc-repo" />
+      <option name="url" value="https://repo.codemc.io/repository/maven-public/" />
+    </remote-repository>
+    <remote-repository>
       <option name="id" value="spigotmc-repo" />
       <option name="name" value="spigotmc-repo" />
       <option name="url" value="https://hub.spigotmc.org/nexus/content/repositories/snapshots/" />
@@ -35,6 +40,11 @@
       <option name="id" value="spigotmc-local" />
       <option name="name" value="spigotmc-local" />
       <option name="url" value="file://C:\Users\PABLO/.m2/repository" />
+    </remote-repository>
+    <remote-repository>
+      <option name="id" value="tr7zw-repo" />
+      <option name="name" value="tr7zw-repo" />
+      <option name="url" value="https://github.com/tr7zw/Item-NBT-API" />
     </remote-repository>
   </component>
 </project>

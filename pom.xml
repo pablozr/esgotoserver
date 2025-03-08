@@ -25,6 +25,13 @@
         <configuration>
           <source>${java.version}</source>
           <target>${java.version}</target>
+            <annotationProcessorPaths>
+                <path>
+                    <groupId>org.projectlombok</groupId>
+                    <artifactId>lombok</artifactId>
+                    <version>1.18.30</version>
+                </path>
+            </annotationProcessorPaths>
         </configuration>
       </plugin>
         <plugin>
@@ -74,6 +81,11 @@
           <id>spigotmc-local</id>
           <url>file://${user.home}/.m2/repository</url>
       </repository>
+      <repository>
+          <id>codemc-repo</id>
+          <url>https://repo.codemc.io/repository/maven-public/</url>
+          <layout>default</layout>
+      </repository>
   </repositories>
 
     <dependencies>
@@ -81,6 +93,18 @@
             <groupId>org.spigotmc</groupId>
             <artifactId>spigot-api</artifactId>
             <version>1.8.8-R0.1-SNAPSHOT</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <version>1.18.30</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
+            <groupId>de.tr7zw</groupId>
+            <artifactId>item-nbt-api-plugin</artifactId>
+            <version>2.14.1</version>
             <scope>provided</scope>
         </dependency>
     </dependencies>
