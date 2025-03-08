@@ -2,3 +2,7 @@ name: esgotoserver
 version: '${project.version}'
 main: org.esg.Main
 depend: [NBTAPI]
+commands:
+  weapon:
+    description: Dá uma arma ao jogador
+    usage: /<command>
