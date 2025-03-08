@@ -1,3 +1,48 @@
 # Default ignored files
 /shelf/
 /workspace.xml
+
+# Ignore a pasta do IntelliJ IDEA e VS Code
+.idea/
+.vscode/
+
+# Ignorar arquivos do sistema operacional
+.DS_Store
+Thumbs.db
+
+# Ignorar arquivos de compilação do Maven/Gradle
+target/
+out/
+bin/
+*.class
+
+# Ignorar dependências baixadas pelo Maven/Gradle
+.mvn/
+.gradle/
+!gradle/wrapper/gradle-wrapper.jar
+**/build/
+
+# Logs e arquivos temporários do Minecraft
+logs/
+cache/
+*.log
+*.lock
+*.tmp
+
+# Configurações do plugin geradas pelo servidor
+plugins/YourPlugin/config.yml
+plugins/YourPlugin/data.yml
+
+# Arquivos sensíveis
+*.key
+*.pem
+*.crt
+
+# Ignorar arquivos de pacotes
+*.jar
+*.war
+*.zip
+*.tar.gz
+
+# Ignore credenciais do Git
+.gitignore

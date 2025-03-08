@@ -14,4 +14,8 @@ public final class Main extends JavaPlugin {
     @Override
     public void onDisable() {
     }
+
+    public static Main getPlugin() {
+        return plugin;
+    }
 }
