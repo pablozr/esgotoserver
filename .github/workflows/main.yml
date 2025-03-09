@@ -8,17 +8,55 @@ jobs:
   move-to-in-progress:
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4  # Necessário pro gh CLI funcionar bem
+
+      - name: Install GitHub CLI
+        run: |
+          sudo apt-get update
+          sudo apt-get install gh  # Instala o gh no runner
+
       - name: Move issue to "Em progresso"
         env:
-          GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }} 
-          PROJECT_ID: "PVT_kwHOB_7ta84Az5-l"
-          COLUMN_NAME: "Em progresso"
+          GH_TOKEN: ${{ secrets.PERSONAL_ACCESS_TOKEN }}  # Corrigido o nome
+          PROJECT_ID: "PVT_kwHOB_7ta84Az5-l"  # Seu Project V2 ID
+          ISSUE_NODE_ID: ${{ github.event.issue.node_id }}
         run: |
-          gh api graphql -F projectId="$PROJECT_ID" -F contentId="${{ github.event.issue.node_id }}" -F columnName="$COLUMN_NAME" -f query='
-          mutation($projectId: ID!, $contentId: ID!, $columnName: String!) {
-            addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
-              item {
-                id
+          # Busca o field ID do "Status" e o optionId de "Em progresso"
+          FIELD_DATA=$(gh api graphql -F projectId="$PROJECT_ID" -f query='
+            query($projectId: ID!) {
+              node(id: $projectId) {
+                ... on ProjectV2 {
+                  fields(first: 20) {
+                    nodes {
+                      ... on ProjectV2SingleSelectField {
+                        id
+                        name
+                        options {
+                          id
+                          name
+                        }
+                      }
+                    }
+                  }
+                }
               }
-            }
-          }'
+            }' | jq -r '.data.node.fields.nodes[] | select(.name == "Status")')
+          
+          FIELD_ID=$(echo "$FIELD_DATA" | jq -r '.id')
+          OPTION_ID=$(echo "$FIELD_DATA" | jq -r '.options[] | select(.name == "Em progresso") | .id')
+
+          # Move a issue pra coluna "Em progresso"
+          gh api graphql -F projectId="$PROJECT_ID" -F itemId="$ISSUE_NODE_ID" -F fieldId="$FIELD_ID" -F valueId="$OPTION_ID" -f query='
+            mutation($projectId: ID!, $itemId: ID!, $fieldId: ID!, $valueId: String!) {
+              updateProjectV2ItemFieldValue(input: {
+                projectId: $projectId,
+                itemId: $itemId,
+                fieldId: $fieldId,
+                value: { singleSelectOptionId: $valueId }
+              }) {
+                projectV2Item {
+                  id
+                }
+              }
+            }'
