@@ -10,7 +10,7 @@ jobs:
     steps:
       - name: Move issue to "Em progresso"
         env:
-          GH_PAT: ${{ secrets.PERSONAL_ACESS_TOKEN }} 
+          GH_TOKEN: ${{ secrets.PERSONAL_ACESS_TOKEN }} 
           PROJECT_ID: "PVT_kwHOB_7ta84Az5-l"
           COLUMN_NAME: "Em progresso"
         run: |
@@ -21,4 +21,4 @@ jobs:
                 id
               }
             }
-          }' --header "Authorization: bearer $PERSONAL_ACESS_TOKEN"
+          }'
