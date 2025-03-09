@@ -33,7 +33,7 @@ public abstract class Weapon {
     protected boolean isReloading = false;
     private transient BukkitRunnable reloadTimer; // Transient pra não persistir no NBT
     private transient int reloadTaskId = -1; // ID do scheduler pra cancelar
-    private transient ItemStack reloadingItem;
+    private transient String reloadingWeaponId;
 
     public Weapon(String name, WeaponType type, AmmoType ammoType, double damage, double range,
                   double accuracy, double fireRate, double projectileSpeed, int maxAmmo,
@@ -59,8 +59,8 @@ public abstract class Weapon {
             return;
         }
 
-        currentAmmo--; // Reduz munição ANTES do disparo
-        updateWeaponItem(player); // Atualiza a munição no item
+        currentAmmo--;
+        updateWeaponItem(player);
 
         Location eyeLocation = player.getEyeLocation();
         Vector direction = eyeLocation.getDirection().normalize();
@@ -90,20 +90,18 @@ public abstract class Weapon {
     }
     public void reload(Player player) {
         if (isReloading) {
-            player.sendMessage("A arma já está recarregando!");
             ActionBarAPI.sendActionBar(player, "§cJá está recarregando!");
             return;
         }
         if (currentAmmo >= maxAmmo) {
-            player.sendMessage("A arma já está totalmente carregada!");
             ActionBarAPI.sendActionBar(player, "§aArma cheia!");
             return;
         }
 
         isReloading = true;
-        reloadingItem = player.getInventory().getItemInHand();
+        ItemStack itemInHand = player.getInventory().getItemInHand();
+        reloadingWeaponId = NBTUtils.getWeaponID(itemInHand);
         updateWeaponItem(player);
-        System.out.println("[DEBUG] Iniciando reload da " + name + " para " + player.getName());
 
         reloadTimer = new BukkitRunnable() {
             int timeLeft = reloadTime;
@@ -129,18 +127,17 @@ public abstract class Weapon {
         reloadTaskId = player.getServer().getScheduler().runTaskLater(
                 player.getServer().getPluginManager().getPlugin("esgotoserver"),
                 () -> {
-                    if (isWeaponInHand(player) && isReloading) { // Só recarrega se ainda estiver na mão e recarregando
+                    if (isWeaponInHand(player) && isReloading) {
                         currentAmmo = maxAmmo;
                         isReloading = false;
                         updateWeaponItem(player);
                         player.playSound(player.getLocation(), Sound.ANVIL_LAND, 1.0f, 1.0f);
                         ActionBarAPI.sendActionBar(player, "§aRecarga concluída! Munição: " + currentAmmo + "/" + maxAmmo);
-                        System.out.println("[DEBUG] Reload da " + name + " concluído para " + player.getName());
                     } else {
-                        cancelReload(player); // Cancela se não estiver na mão
+                        cancelReload(player);
                     }
                     reloadTaskId = -1;
-                    reloadingItem = null;
+                    reloadingWeaponId = null;
                 },
                 reloadTime * 20L
         ).getTaskId();
@@ -149,15 +146,10 @@ public abstract class Weapon {
         return currentAmmo > 0;
     }
 
-    private boolean isSameItemInHand(Player player) {
-        ItemStack item = player.getInventory().getItemInHand();
-        return item != null && item.equals(reloadingItem); // Compara o ItemStack exato
-    }
-
     private boolean isWeaponInHand(Player player) {
         ItemStack item = player.getInventory().getItemInHand();
-        Weapon weapon = NBTUtils.getWeaponFromNBT(item);
-        return weapon != null && weapon.getName().equals(this.name); // Verifica se é a mesma arma
+        String currentWeaponId = NBTUtils.getWeaponID(item);
+        return currentWeaponId != null && currentWeaponId.equals(reloadingWeaponId);
     }
 
     public void cancelReload(Player player) {
@@ -171,10 +163,10 @@ public abstract class Weapon {
         }
         if (isReloading) {
             isReloading = false;
-            updateWeaponItem(player);
+            updateOriginalWeaponItem(player);
             ActionBarAPI.sendActionBar(player, "§cRecarga cancelada!", Math.max(20, reloadTime * 20));
         }
-        reloadingItem = null;
+        reloadingWeaponId = null;
     }
 
     public void setCurrentAmmo(int currentAmmo) {
@@ -197,5 +189,17 @@ public abstract class Weapon {
     }
     public void setReloading(boolean isReloading) {
         this.isReloading = isReloading;
+    }
+
+    private void updateOriginalWeaponItem(Player player) {
+        if (reloadingWeaponId == null) return;
+        for (int i = 0; i < player.getInventory().getSize(); i++) {
+            ItemStack item = player.getInventory().getItem(i);
+            if (item != null && reloadingWeaponId.equals(NBTUtils.getWeaponID(item))) {
+                ItemStack updatedItem = NBTUtils.applyWeaponNBT(item, this);
+                player.getInventory().setItem(i, updatedItem);
+                return;
+            }
+        }
     }
 }

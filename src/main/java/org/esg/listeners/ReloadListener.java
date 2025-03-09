@@ -39,11 +39,18 @@ public class ReloadListener implements Listener {
     @EventHandler
     public void onPlayerSwitchItem(PlayerItemHeldEvent e) {
         Player player = e.getPlayer();
-        ItemStack currentItem = player.getInventory().getItem(e.getPreviousSlot()); // Item anterior
-        Weapon currentWeapon = NBTUtils.getWeaponFromNBT(currentItem);
+        ItemStack previousItem = player.getInventory().getItem(e.getPreviousSlot());
+        ItemStack newItem = player.getInventory().getItem(e.getNewSlot());
 
-        if (currentWeapon != null && currentWeapon.isReloading()) {
-            currentWeapon.cancelReload(player); // Cancela a recarga da arma anterior
+        String previousWeaponID = NBTUtils.getWeaponID(previousItem);
+        String newWeaponID = NBTUtils.getWeaponID(newItem);
+
+        Weapon previousWeapon = NBTUtils.getWeaponFromNBT(previousItem);
+
+        if (previousWeapon != null && previousWeapon.isReloading()) {
+            if (newWeaponID == null || !newWeaponID.equals(previousWeaponID)) {
+                previousWeapon.cancelReload(player);
+            }
         }
     }
 
@@ -54,9 +61,12 @@ public class ReloadListener implements Listener {
         Weapon weapon = NBTUtils.getWeaponFromNBT(droppedItem);
 
         if (weapon != null && weapon.isReloading()) {
-            weapon.cancelReload(player); // Cancela a recarga
-            droppedItem.setItemMeta(NBTUtils.applyWeaponNBT(droppedItem, weapon).getItemMeta()); // Atualiza o NBT do item dropado
-            e.getItemDrop().setItemStack(droppedItem); // Aplica o item atualizado no drop
+            weapon.setReloading(false);
+            if (droppedItem != null && droppedItem.getAmount() > 0) {
+                ItemStack updatedItem = NBTUtils.applyWeaponNBT(droppedItem, weapon);
+                e.getItemDrop().setItemStack(updatedItem);
+            }
+            weapon.cancelReload(player);
         }
     }
 
@@ -68,7 +78,7 @@ public class ReloadListener implements Listener {
         Weapon weapon = NBTUtils.getWeaponFromNBT(item);
 
         if (weapon != null && weapon.isReloading()) {
-            weapon.cancelReload(player); // Cancela a recarga ao pegar
+            weapon.cancelReload(player);
         }
     }
 }

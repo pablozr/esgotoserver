@@ -2,18 +2,19 @@ package org.esg.utils;
 
 import de.tr7zw.nbtapi.NBTItem;
 import org.bukkit.inventory.ItemStack;
-import org.esg.models.AmmoType;
 import org.esg.models.Weapon;
-import org.esg.models.WeaponType;
 import org.esg.weapons.WeaponFactory;
 
-import java.util.UUID;
-
 public class NBTUtils {
-    public static ItemStack applyWeaponNBT(ItemStack item, Weapon weapon){
+
+    public static ItemStack applyWeaponNBT(ItemStack item, Weapon weapon) {
         NBTItem nbtItem = new NBTItem(item);
 
-        nbtItem.setString("weapon_id", UUID.randomUUID().toString());
+        // Se o item já tem um weapon_id, mantém o mesmo
+        if (!nbtItem.hasTag("weapon_id")) {
+            nbtItem.setString("weapon_id", java.util.UUID.randomUUID().toString());
+        }
+
         nbtItem.setString("weapon_name", weapon.getName());
         nbtItem.setString("weapon_type", weapon.getType().name());
         nbtItem.setDouble("damage", weapon.getDamage());
@@ -49,5 +50,10 @@ public class NBTUtils {
             return null;
         }
     }
-    
+
+    public static String getWeaponID(ItemStack item) {
+        if (item == null || !item.hasItemMeta()) return null;
+        NBTItem nbtItem = new NBTItem(item);
+        return nbtItem.hasTag("weapon_id") ? nbtItem.getString("weapon_id") : null;
+    }
 }
