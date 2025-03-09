@@ -31,9 +31,9 @@ public abstract class Weapon {
     protected int reloadTime;
     protected int projectileCount;// Quantidade de projéteis disparado por clique
     protected boolean isReloading = false;
-    private transient BukkitRunnable reloadTimer; // Transient pra não persistir no NBT
     private transient int reloadTaskId = -1; // ID do scheduler pra cancelar
     private transient String reloadingWeaponId;
+    private transient int reloadSlot = -1;
 
     public Weapon(String name, WeaponType type, AmmoType ammoType, double damage, double range,
                   double accuracy, double fireRate, double projectileSpeed, int maxAmmo,
@@ -101,71 +101,101 @@ public abstract class Weapon {
         isReloading = true;
         ItemStack itemInHand = player.getInventory().getItemInHand();
         reloadingWeaponId = NBTUtils.getWeaponID(itemInHand);
+        reloadSlot = player.getInventory().getHeldItemSlot();
         updateWeaponItem(player);
+        System.out.println("[DEBUG] Iniciando reload da " + name + " (ID: " + reloadingWeaponId + ") no slot " + reloadSlot + " | isReloading: " + isReloading);
 
-        reloadTimer = new BukkitRunnable() {
-            int timeLeft = reloadTime;
+        reloadTaskId = new BukkitRunnable() {
+            int ticksLeft = reloadTime * 20; // Converte segundos pra ticks
 
             @Override
             public void run() {
                 if (!isReloading || !isWeaponInHand(player)) {
+                    System.out.println("[DEBUG] Reload cancelado automaticamente | isReloading: " + isReloading + " | isWeaponInHand: " + isWeaponInHand(player));
                     cancelReload(player);
-                    cancel();
                     return;
                 }
 
-                ActionBarAPI.sendActionBar(player, "§eRecarregando... " + timeLeft + "s");
-                timeLeft--;
+                int secondsLeft = ticksLeft / 20;
+                ActionBarAPI.sendActionBar(player, "§eRecarregando... " + secondsLeft + "s");
 
-                if (timeLeft < 0) {
-                    cancel();
-                }
-            }
-        };
-        reloadTimer.runTaskTimer(player.getServer().getPluginManager().getPlugin("esgotoserver"), 0L, 20L);
-
-        reloadTaskId = player.getServer().getScheduler().runTaskLater(
-                player.getServer().getPluginManager().getPlugin("esgotoserver"),
-                () -> {
-                    if (isWeaponInHand(player) && isReloading) {
+                if (ticksLeft <= 0) {
+                    if (isReloading && isWeaponInHand(player)) {
                         currentAmmo = maxAmmo;
                         isReloading = false;
                         updateWeaponItem(player);
                         player.playSound(player.getLocation(), Sound.ANVIL_LAND, 1.0f, 1.0f);
                         ActionBarAPI.sendActionBar(player, "§aRecarga concluída! Munição: " + currentAmmo + "/" + maxAmmo);
-                    } else {
-                        cancelReload(player);
+                        System.out.println("[DEBUG] Reload concluído da " + name + " (ID: " + reloadingWeaponId + ") no slot " + reloadSlot);
                     }
                     reloadTaskId = -1;
+                    reloadSlot = -1;
                     reloadingWeaponId = null;
-                },
-                reloadTime * 20L
-        ).getTaskId();
+                    cancel(); // Para o runnable
+                }
+
+                ticksLeft--;
+            }
+        }.runTaskTimer(player.getServer().getPluginManager().getPlugin("esgotoserver"), 0L, 1L).getTaskId();
     }
-    public boolean canShoot(){
+
+    public boolean canShoot() {
         return currentAmmo > 0;
     }
 
     private boolean isWeaponInHand(Player player) {
         ItemStack item = player.getInventory().getItemInHand();
         String currentWeaponId = NBTUtils.getWeaponID(item);
-        return currentWeaponId != null && currentWeaponId.equals(reloadingWeaponId);
+        boolean result = currentWeaponId != null && reloadingWeaponId != null && currentWeaponId.equals(reloadingWeaponId);
+        System.out.println("[DEBUG] isWeaponInHand | currentWeaponId: " + currentWeaponId + " | reloadingWeaponId: " + reloadingWeaponId + " | Result: " + result);
+        return result;
     }
 
     public void cancelReload(Player player) {
-        if (reloadTimer != null) {
-            reloadTimer.cancel();
-            reloadTimer = null;
+        if (!isReloading) {
+            System.out.println("[DEBUG] cancelReload chamado, mas isReloading já é false");
+            return;
         }
+
+        isReloading = false;
+
+        // Persiste o estado no slot original
+        if (reloadSlot != -1) {
+            ItemStack item = player.getInventory().getItem(reloadSlot);
+            if (item != null && reloadingWeaponId != null && reloadingWeaponId.equals(NBTUtils.getWeaponID(item))) {
+                ItemStack updatedItem = NBTUtils.applyWeaponNBT(item, this);
+                player.getInventory().setItem(reloadSlot, updatedItem);
+                System.out.println("[DEBUG] Item atualizado no slot " + reloadSlot + " para " + name + " (ID: " + reloadingWeaponId + ") | isReloading: " + isReloading);
+            } else {
+                System.out.println("[DEBUG] Item no slot " + reloadSlot + " não corresponde ao ID " + reloadingWeaponId);
+            }
+        } else {
+            System.out.println("[DEBUG] reloadSlot é -1, não atualizou NBT");
+        }
+
+        // Cancela o scheduler
         if (reloadTaskId != -1) {
-            player.getServer().getScheduler().cancelTask(reloadTaskId);
+            try {
+                player.getServer().getScheduler().cancelTask(reloadTaskId);
+                System.out.println("[DEBUG] reloadTaskId cancelado manualmente | ID: " + reloadTaskId);
+            } catch (Exception e) {
+                System.out.println("[DEBUG] Falha ao cancelar reloadTaskId: " + e.getMessage());
+            }
             reloadTaskId = -1;
         }
-        if (isReloading) {
-            isReloading = false;
-            updateOriginalWeaponItem(player);
-            ActionBarAPI.sendActionBar(player, "§cRecarga cancelada!", Math.max(20, reloadTime * 20));
-        }
+
+        ActionBarAPI.sendActionBar(player, "§cRecarga cancelada!", 40);
+        System.out.println("[DEBUG] Reload da " + name + " (ID: " + reloadingWeaponId + ") cancelado para " + player.getName() + " no slot " + reloadSlot + " | isReloading: " + isReloading);
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (!isReloading) {
+                    ActionBarAPI.sendActionBar(player, "", 20);
+                }
+            }
+        }.runTaskLater(player.getServer().getPluginManager().getPlugin("esgotoserver"), 40L);
+
+        reloadSlot = -1;
         reloadingWeaponId = null;
     }
 
@@ -175,7 +205,7 @@ public abstract class Weapon {
 
     private void updateWeaponItem(Player player) {
         ItemStack item = player.getInventory().getItemInHand();
-        if (item != null) {
+        if (item != null && item.getAmount() > 0) {
             ItemStack updatedItem = NBTUtils.applyWeaponNBT(item, this);
             player.getInventory().setItemInHand(updatedItem);
         }
@@ -184,22 +214,12 @@ public abstract class Weapon {
     private void updateAmmoDisplay(Player player) {
         ActionBarAPI.sendActionBar(player, "§fMunição: " + currentAmmo + "/" + maxAmmo);
     }
+
     public boolean isReloading() {
         return isReloading;
     }
+
     public void setReloading(boolean isReloading) {
         this.isReloading = isReloading;
-    }
-
-    private void updateOriginalWeaponItem(Player player) {
-        if (reloadingWeaponId == null) return;
-        for (int i = 0; i < player.getInventory().getSize(); i++) {
-            ItemStack item = player.getInventory().getItem(i);
-            if (item != null && reloadingWeaponId.equals(NBTUtils.getWeaponID(item))) {
-                ItemStack updatedItem = NBTUtils.applyWeaponNBT(item, this);
-                player.getInventory().setItem(i, updatedItem);
-                return;
-            }
-        }
     }
 }

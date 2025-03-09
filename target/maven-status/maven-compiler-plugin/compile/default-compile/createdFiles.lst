@@ -6,6 +6,7 @@ org\esg\commands\WeaponCommand.class
 org\esg\models\Weapon.class
 org\esg\weapons\AK47.class
 org\esg\models\Weapon$1.class
+org\esg\models\Weapon$2.class
 org\esg\models\AmmoType.class
 org\esg\listeners\ShootListener.class
 org\esg\Main.class
