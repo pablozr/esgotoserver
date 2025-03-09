@@ -25,6 +25,7 @@ public class NBTUtils {
         nbtItem.setInteger("current_ammo", weapon.getCurrentAmmo());
         nbtItem.setInteger("reload_time", weapon.getReloadTime());
         nbtItem.setInteger("projectile_count", weapon.getProjectileCount());
+        nbtItem.setBoolean("is_reloading", weapon.isReloading());
 
         return nbtItem.getItem();
     }
@@ -37,10 +38,12 @@ public class NBTUtils {
 
         String weaponName = nbtItem.getString("weapon_name");
         int currentAmmo = nbtItem.getInteger("current_ammo");
+        boolean isReloading = nbtItem.getBoolean("is_reloading");
 
         try {
             Weapon weapon = WeaponFactory.createWeapon(weaponName);
             weapon.setCurrentAmmo(currentAmmo);
+            weapon.setReloading(isReloading);
             return weapon;
         } catch (IllegalArgumentException e) {
             return null;

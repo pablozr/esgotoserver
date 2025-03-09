@@ -1,0 +1,15 @@
+org\esg\models\WeaponType.class
+org\esg\commands\CommandHeal.class
+org\esg\weapons\WeaponManager.class
+org\esg\listeners\ReloadListener.class
+org\esg\commands\WeaponCommand.class
+org\esg\models\Weapon.class
+org\esg\weapons\AK47.class
+org\esg\models\Weapon$1.class
+org\esg\models\AmmoType.class
+org\esg\listeners\ShootListener.class
+org\esg\Main.class
+org\esg\listeners\WeaponHeldListener.class
+org\esg\utils\NBTUtils.class
+org\esg\weapons\WeaponFactory$1.class
+org\esg\weapons\WeaponFactory.class

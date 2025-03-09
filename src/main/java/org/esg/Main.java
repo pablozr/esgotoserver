@@ -6,6 +6,7 @@ import org.esg.commands.CommandHeal;
 import org.esg.commands.WeaponCommand;
 import org.esg.listeners.ReloadListener;
 import org.esg.listeners.ShootListener;
+import org.esg.listeners.WeaponHeldListener;
 
 public final class Main extends JavaPlugin {
 
@@ -17,6 +18,7 @@ public final class Main extends JavaPlugin {
         plugin = this;
         getServer().getPluginManager().registerEvents(new ShootListener(), this);
         getServer().getPluginManager().registerEvents(new ReloadListener(), this);
+        getServer().getPluginManager().registerEvents(new WeaponHeldListener(), this);
         this.getCommand("weapon").setExecutor(new WeaponCommand());
     }
 
