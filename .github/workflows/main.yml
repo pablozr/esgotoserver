@@ -8,8 +8,17 @@ jobs:
   move-to-in-progress:
     runs-on: ubuntu-latest
     steps:
-      - uses: alex-page/github-project-automation-plus@v0.8.3
-        with:
-          project: "TODO's"  
-          column: "Em progresso"
-          repo-token: ${{ secrets.PERSONAL_ACCESS_TOKEN }}
+      - name: Move issue to "Em progresso"
+        env:
+          GH_PAT: ${{ secrets.PERSONAL_ACESS_TOKEN }} 
+          PROJECT_ID: "PVT_kwHOB_7ta84Az5-l"
+          COLUMN_NAME: "Em progresso"
+        run: |
+          gh api graphql -F projectId="$PROJECT_ID" -F contentId="${{ github.event.issue.node_id }}" -F columnName="$COLUMN_NAME" -f query='
+          mutation($projectId: ID!, $contentId: ID!, $columnName: String!) {
+            addProjectV2ItemById(input: {projectId: $projectId, contentId: $contentId}) {
+              item {
+                id
+              }
+            }
+          }' --header "Authorization: bearer $PERSONAL_ACESS_TOKEN"
