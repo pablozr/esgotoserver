@@ -100,6 +100,12 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
+            <groupId>org.spigotmc</groupId>
+            <artifactId>spigot</artifactId>
+            <version>1.8.8-R0.1-SNAPSHOT</version>
+            <scope>provided</scope>
+        </dependency>
+        <dependency>
             <groupId>com.github.ConnorLinfoot</groupId>
             <artifactId>ActionBarAPI</artifactId>
             <version>5b2d642d3df</version>

@@ -1,12 +1,13 @@
-C:\Users\PABLO\Desktop\esgotoserver\src\main\java\org\esg\commands\WeaponCommand.java
-C:\Users\PABLO\Desktop\esgotoserver\src\main\java\org\esg\Main.java
-C:\Users\PABLO\Desktop\esgotoserver\src\main\java\org\esg\listeners\ReloadListener.java
-C:\Users\PABLO\Desktop\esgotoserver\src\main\java\org\esg\models\WeaponType.java
+C:\Users\PABLO\Desktop\esgotoserver\src\main\java\org\esg\listeners\WeaponHeldListener.java
 C:\Users\PABLO\Desktop\esgotoserver\src\main\java\org\esg\models\AmmoType.java
 C:\Users\PABLO\Desktop\esgotoserver\src\main\java\org\esg\weapons\AK47.java
 C:\Users\PABLO\Desktop\esgotoserver\src\main\java\org\esg\commands\CommandHeal.java
 C:\Users\PABLO\Desktop\esgotoserver\src\main\java\org\esg\utils\NBTUtils.java
 C:\Users\PABLO\Desktop\esgotoserver\src\main\java\org\esg\listeners\ShootListener.java
+C:\Users\PABLO\Desktop\esgotoserver\src\main\java\org\esg\commands\WeaponCommand.java
+C:\Users\PABLO\Desktop\esgotoserver\src\main\java\org\esg\Main.java
+C:\Users\PABLO\Desktop\esgotoserver\src\main\java\org\esg\listeners\ReloadListener.java
+C:\Users\PABLO\Desktop\esgotoserver\src\main\java\org\esg\models\WeaponType.java
 C:\Users\PABLO\Desktop\esgotoserver\src\main\java\org\esg\weapons\WeaponFactory.java
 C:\Users\PABLO\Desktop\esgotoserver\src\main\java\org\esg\models\Weapon.java
 C:\Users\PABLO\Desktop\esgotoserver\src\main\java\org\esg\weapons\WeaponManager.java

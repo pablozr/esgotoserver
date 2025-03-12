@@ -1,20 +1,23 @@
 package org.esg.models;
 
-import com.connorlinfoot.actionbarapi.ActionBarAPI;
 import lombok.Getter;
-import net.md_5.bungee.api.ChatMessageType;
-import net.md_5.bungee.api.chat.TextComponent;
-import org.bukkit.Effect;
+import net.minecraft.server.v1_8_R3.EnumParticle;
 import org.bukkit.Location;
-import org.bukkit.Sound;
 import org.bukkit.entity.Entity;
 import org.bukkit.entity.LivingEntity;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.bukkit.util.Vector;
-import org.esg.utils.NBTUtils;
+import org.esg.Effects.ParticleCat;
+import org.esg.Main;
+import org.esg.utils.MessageHandler;
+import org.esg.Effects.SoundEffects;
+import org.esg.utils.WeaponUtils;
 
+import java.util.HashMap;
+import java.util.Map;
+import java.util.UUID;
 
 @Getter
 public abstract class Weapon {
@@ -25,15 +28,20 @@ public abstract class Weapon {
     protected double range;
     protected double accuracy;
     protected double fireRate;
-    protected double projectileSpeed; // Velocidade de viagem do projétil
+    protected double projectileSpeed;
     protected int maxAmmo;
     protected int currentAmmo;
     protected int reloadTime;
-    protected int projectileCount;// Quantidade de projéteis disparado por clique
+    protected int projectileCount;
     protected boolean isReloading = false;
-    private transient int reloadTaskId = -1; // ID do scheduler pra cancelar
+    private transient int reloadTaskId = -1;
     private transient String reloadingWeaponId;
     private transient int reloadSlot = -1;
+
+    private static final Map<UUID, Boolean> isFiring = new HashMap<>();
+    private static final Map<UUID, Long> lastClickTimes = new HashMap<>();
+    // Cache para isReloading
+    private static final Map<UUID, CachedReloadingState> reloadingCache = new HashMap<>();
 
     public Weapon(String name, WeaponType type, AmmoType ammoType, double damage, double range,
                   double accuracy, double fireRate, double projectileSpeed, int maxAmmo,
@@ -47,179 +55,279 @@ public abstract class Weapon {
         this.fireRate = fireRate;
         this.projectileSpeed = projectileSpeed;
         this.maxAmmo = maxAmmo;
-        this.currentAmmo = maxAmmo;
+        this.currentAmmo = currentAmmo;
         this.reloadTime = reloadTime;
         this.projectileCount = projectileCount;
     }
 
+    // Classe para armazenar o estado de recarga em cache
+    private static class CachedReloadingState {
+        boolean isReloading;
+        long timestamp;
+
+        CachedReloadingState(boolean isReloading, long timestamp) {
+            this.isReloading = isReloading;
+            this.timestamp = timestamp;
+        }
+    }
+
     public void shoot(Player player) {
-        if (!canShoot()) {
-            ActionBarAPI.sendActionBar(player, "§cSem munição!");
-            player.playSound(player.getLocation(), Sound.ITEM_BREAK, 1.0f, 1.0f);
+        if (!canShoot(player)) {
+            if (isReloading(player)) {
+                MessageHandler.sendReloading(player);
+            } else {
+                MessageHandler.sendNoAmmo(player);
+                SoundEffects.playError(player);
+            }
+            isFiring.put(player.getUniqueId(), false);
+            WeaponUtils.updateWeaponInHand(player, this);
             return;
         }
 
         currentAmmo--;
-        updateWeaponItem(player);
+        System.out.println("[Weapon] Shot fired by " + player.getName() + ", currentAmmo decremented to: " + currentAmmo);
 
+        if (currentAmmo <= 0) {
+            MessageHandler.sendNoAmmo(player);
+            SoundEffects.playError(player);
+            isFiring.put(player.getUniqueId(), false);
+            WeaponUtils.updateWeaponInHand(player, this);
+            return;
+        }
+
+        performShot(player);
+        MessageHandler.sendAmmoStatus(player, currentAmmo, maxAmmo);
+        WeaponUtils.updateWeaponInHand(player, this);
+    }
+
+    private void performShot(Player player) {
+        Location handLocation = getHandLocation(player);
+        Vector direction = calculateShotDirection(player.getEyeLocation());
+        traceProjectile(player, handLocation, direction);
+        SoundEffects.playShotAt(player, handLocation);
+    }
+
+    private Location getHandLocation(Player player) {
         Location eyeLocation = player.getEyeLocation();
         Vector direction = eyeLocation.getDirection().normalize();
 
+        Location handLocation = eyeLocation.clone();
+        handLocation.setY(handLocation.getY() - 0.6);
+        handLocation.add(direction.multiply(1.2));
+
+        return handLocation;
+    }
+
+    private Vector calculateShotDirection(Location eyeLocation) {
+        Vector direction = eyeLocation.getDirection().normalize();
         double inaccuracy = (1.0 - accuracy) * 0.1;
-        direction.add(new Vector(
-                (Math.random() - 0.5) * inaccuracy,
-                (Math.random() - 0.5) * inaccuracy,
-                (Math.random() - 0.5) * inaccuracy
-        )).normalize();
+        double offsetX = (Math.random() - 0.5) * 2 * inaccuracy;
+        double offsetY = (Math.random() - 0.5) * 2 * inaccuracy;
+        double offsetZ = (Math.random() - 0.5) * 2 * inaccuracy;
+        direction.add(new Vector(offsetX, offsetY, offsetZ)).normalize();
+        return direction;
+    }
 
+    private void traceProjectile(Player player, Location start, Vector direction) {
         for (double i = 0; i < range; i += 0.5) {
-            Location particleLoc = eyeLocation.clone().add(direction.clone().multiply(i));
-            player.getWorld().playEffect(particleLoc, Effect.SMALL_SMOKE, 1, 0);
+            Location particleLoc = start.clone().add(direction.clone().multiply(i));
+            ParticleCat.sendParticle(EnumParticle.SMOKE_NORMAL, particleLoc, 0, 0, 0, 0, 1);
 
-            for (Entity entity : player.getWorld().getNearbyEntities(particleLoc, 0.5, 0.5, 0.5)) {
+            for (Entity entity : player.getWorld().getNearbyEntities(particleLoc, 0.5, 0.5, 0.1)) {
                 if (entity instanceof LivingEntity && entity != player) {
                     ((LivingEntity) entity).damage(damage, player);
-                    player.playSound(player.getLocation(), Sound.FIREWORK_BLAST, 1.0f, 1.0f);
+                    SoundEffects.playShotAt(player, particleLoc);
                     return;
                 }
             }
         }
-
-        player.playSound(player.getLocation(), Sound.FIREWORK_BLAST, 1.0f, 1.0f);
-        updateAmmoDisplay(player);
     }
+
     public void reload(Player player) {
-        if (isReloading) {
-            ActionBarAPI.sendActionBar(player, "§cJá está recarregando!");
+        if (isReloading(player)) {
+            System.out.println("[Weapon] Reload blocked: already reloading for player " + player.getName());
+            MessageHandler.sendAlreadyReloading(player);
             return;
         }
         if (currentAmmo >= maxAmmo) {
-            ActionBarAPI.sendActionBar(player, "§aArma cheia!");
+            System.out.println("[Weapon] Reload blocked: ammo full for player " + player.getName());
+            MessageHandler.sendFullAmmo(player);
             return;
         }
+        startReload(player);
+    }
 
+    private void startReload(Player player) {
+        System.out.println("[Weapon] Starting reload for player: " + player.getName());
         isReloading = true;
         ItemStack itemInHand = player.getInventory().getItemInHand();
-        reloadingWeaponId = NBTUtils.getWeaponID(itemInHand);
+        reloadingWeaponId = WeaponUtils.getWeaponId(itemInHand);
         reloadSlot = player.getInventory().getHeldItemSlot();
-        updateWeaponItem(player);
-        System.out.println("[DEBUG] Iniciando reload da " + name + " (ID: " + reloadingWeaponId + ") no slot " + reloadSlot + " | isReloading: " + isReloading);
+        if (reloadSlot < 0 || reloadSlot > 8) {
+            System.out.println("[Weapon] Invalid reloadSlot detected: " + reloadSlot + ", setting to 0");
+            reloadSlot = 0; // Valor padrão seguro
+        }
+
+        isFiring.put(player.getUniqueId(), false);
+        WeaponUtils.updateWeaponInHand(player, this);
+        // Atualizar o cache
+        reloadingCache.put(player.getUniqueId(), new CachedReloadingState(true, System.currentTimeMillis()));
 
         reloadTaskId = new BukkitRunnable() {
-            int ticksLeft = reloadTime * 20; // Converte segundos pra ticks
+            int ticksLeft = reloadTime * 20;
 
             @Override
             public void run() {
-                if (!isReloading || !isWeaponInHand(player)) {
-                    System.out.println("[DEBUG] Reload cancelado automaticamente | isReloading: " + isReloading + " | isWeaponInHand: " + isWeaponInHand(player));
+                if (!isReloading(player) || !isWeaponInHand(player)) {
                     cancelReload(player);
+                    cancel();
                     return;
                 }
 
                 int secondsLeft = ticksLeft / 20;
-                ActionBarAPI.sendActionBar(player, "§eRecarregando... " + secondsLeft + "s");
+                MessageHandler.sendReloadProgress(player, secondsLeft);
 
                 if (ticksLeft <= 0) {
-                    if (isReloading && isWeaponInHand(player)) {
-                        currentAmmo = maxAmmo;
-                        isReloading = false;
-                        updateWeaponItem(player);
-                        player.playSound(player.getLocation(), Sound.ANVIL_LAND, 1.0f, 1.0f);
-                        ActionBarAPI.sendActionBar(player, "§aRecarga concluída! Munição: " + currentAmmo + "/" + maxAmmo);
-                        System.out.println("[DEBUG] Reload concluído da " + name + " (ID: " + reloadingWeaponId + ") no slot " + reloadSlot);
-                    }
-                    reloadTaskId = -1;
-                    reloadSlot = -1;
-                    reloadingWeaponId = null;
-                    cancel(); // Para o runnable
+                    completeReload(player);
+                    cancel();
                 }
 
                 ticksLeft--;
             }
-        }.runTaskTimer(player.getServer().getPluginManager().getPlugin("esgotoserver"), 0L, 1L).getTaskId();
+        }.runTaskTimer(Main.getPlugin(), 0L, 1L).getTaskId();
     }
 
-    public boolean canShoot() {
-        return currentAmmo > 0;
+    public boolean canShoot(Player player) {
+        boolean canShoot = currentAmmo > 0 && !isReloading(player);
+        System.out.println("[Weapon] canShoot for player " + player.getName() + ": currentAmmo=" + currentAmmo + ", isReloading=" + isReloading(player) + ", result=" + canShoot);
+        return canShoot;
     }
 
-    private boolean isWeaponInHand(Player player) {
-        ItemStack item = player.getInventory().getItemInHand();
-        String currentWeaponId = NBTUtils.getWeaponID(item);
-        boolean result = currentWeaponId != null && reloadingWeaponId != null && currentWeaponId.equals(reloadingWeaponId);
-        System.out.println("[DEBUG] isWeaponInHand | currentWeaponId: " + currentWeaponId + " | reloadingWeaponId: " + reloadingWeaponId + " | Result: " + result);
+    public boolean isReloading(Player player) {
+        UUID playerId = player.getUniqueId();
+        // Verificar cache
+        CachedReloadingState cached = reloadingCache.get(playerId);
+        if (cached != null && (System.currentTimeMillis() - cached.timestamp) < 1000) { // Cache válido por 1 segundo
+            return cached.isReloading;
+        }
+
+        ItemStack itemInHand = player.getInventory().getItemInHand();
+        boolean result;
+        if (itemInHand != null && WeaponUtils.isSameWeapon(itemInHand, reloadingWeaponId)) {
+            Weapon weaponFromItem = WeaponUtils.getWeaponFromItem(itemInHand, player);
+            if (weaponFromItem != null) {
+                System.out.println("[Weapon] isReloading for player " + player.getName() + ": weaponFromItem.isReloading=" + weaponFromItem.isReloading + ", currentAmmo=" + weaponFromItem.currentAmmo);
+                result = weaponFromItem.isReloading;
+            } else {
+                System.out.println("[Weapon] isReloading for player " + player.getName() + ": fallback to local isReloading=" + isReloading + ", currentAmmo=" + currentAmmo);
+                result = isReloading;
+            }
+        } else {
+            System.out.println("[Weapon] isReloading for player " + player.getName() + ": fallback to local isReloading=" + isReloading + ", currentAmmo=" + currentAmmo);
+            result = isReloading;
+        }
+
+        // Atualizar o cache
+        reloadingCache.put(playerId, new CachedReloadingState(result, System.currentTimeMillis()));
         return result;
     }
 
     public void cancelReload(Player player) {
-        if (!isReloading) {
-            System.out.println("[DEBUG] cancelReload chamado, mas isReloading já é false");
-            return;
-        }
+        if (!isReloading(player)) return;
 
+        System.out.println("[Weapon] Cancelling reload for player: " + player.getName() + ", reloadSlot=" + reloadSlot);
         isReloading = false;
-
-        // Persiste o estado no slot original
-        if (reloadSlot != -1) {
-            ItemStack item = player.getInventory().getItem(reloadSlot);
-            if (item != null && reloadingWeaponId != null && reloadingWeaponId.equals(NBTUtils.getWeaponID(item))) {
-                ItemStack updatedItem = NBTUtils.applyWeaponNBT(item, this);
-                player.getInventory().setItem(reloadSlot, updatedItem);
-                System.out.println("[DEBUG] Item atualizado no slot " + reloadSlot + " para " + name + " (ID: " + reloadingWeaponId + ") | isReloading: " + isReloading);
-            } else {
-                System.out.println("[DEBUG] Item no slot " + reloadSlot + " não corresponde ao ID " + reloadingWeaponId);
-            }
-        } else {
-            System.out.println("[DEBUG] reloadSlot é -1, não atualizou NBT");
-        }
-
-        // Cancela o scheduler
+        isFiring.put(player.getUniqueId(), false);
         if (reloadTaskId != -1) {
-            try {
-                player.getServer().getScheduler().cancelTask(reloadTaskId);
-                System.out.println("[DEBUG] reloadTaskId cancelado manualmente | ID: " + reloadTaskId);
-            } catch (Exception e) {
-                System.out.println("[DEBUG] Falha ao cancelar reloadTaskId: " + e.getMessage());
-            }
+            player.getServer().getScheduler().cancelTask(reloadTaskId);
             reloadTaskId = -1;
         }
 
-        ActionBarAPI.sendActionBar(player, "§cRecarga cancelada!", 40);
-        System.out.println("[DEBUG] Reload da " + name + " (ID: " + reloadingWeaponId + ") cancelado para " + player.getName() + " no slot " + reloadSlot + " | isReloading: " + isReloading);
-        new BukkitRunnable() {
-            @Override
-            public void run() {
-                if (!isReloading) {
-                    ActionBarAPI.sendActionBar(player, "", 20);
-                }
-            }
-        }.runTaskLater(player.getServer().getPluginManager().getPlugin("esgotoserver"), 40L);
+        if (reloadSlot >= 0 && reloadSlot <= 8) {
+            WeaponUtils.updateWeaponInSlot(player, reloadSlot, this);
+            System.out.println("[Weapon] Updated NBT in slot " + reloadSlot + " with isReloading=false");
+        } else {
+            System.out.println("[Weapon] Invalid reloadSlot: " + reloadSlot + ", skipping update");
+        }
+        MessageHandler.sendReloadCancelled(player);
+
+        // Atualizar o cache
+        reloadingCache.put(player.getUniqueId(), new CachedReloadingState(false, System.currentTimeMillis()));
 
         reloadSlot = -1;
         reloadingWeaponId = null;
+
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (!isReloading(player)) MessageHandler.clear(player);
+            }
+        }.runTaskLater(Main.getPlugin(), 40L);
     }
 
     public void setCurrentAmmo(int currentAmmo) {
         this.currentAmmo = Math.max(0, Math.min(currentAmmo, maxAmmo));
     }
 
-    private void updateWeaponItem(Player player) {
-        ItemStack item = player.getInventory().getItemInHand();
-        if (item != null && item.getAmount() > 0) {
-            ItemStack updatedItem = NBTUtils.applyWeaponNBT(item, this);
-            player.getInventory().setItemInHand(updatedItem);
+    public void setReloading(boolean reloading) {
+        this.isReloading = reloading;
+        // Atualizar o cache ao alterar o estado
+        if (reloadingWeaponId != null) {
+            Player player = Main.getPlugin().getServer().getPlayer(reloadingWeaponId);
+            if (player != null) {
+                reloadingCache.put(player.getUniqueId(), new CachedReloadingState(reloading, System.currentTimeMillis()));
+            }
         }
     }
 
-    private void updateAmmoDisplay(Player player) {
-        ActionBarAPI.sendActionBar(player, "§fMunição: " + currentAmmo + "/" + maxAmmo);
+    public String getReloadingWeaponId() {
+        return reloadingWeaponId;
     }
 
-    public boolean isReloading() {
-        return isReloading;
+    private void completeReload(Player player) {
+        if (!isReloading(player) || !isWeaponInHand(player)) return;
+
+        System.out.println("[Weapon] Completing reload for player: " + player.getName());
+        currentAmmo = maxAmmo;
+        isReloading = false;
+        isFiring.put(player.getUniqueId(), false);
+        WeaponUtils.updateWeaponInHand(player, this);
+        SoundEffects.playReloadComplete(player);
+        MessageHandler.sendReloadComplete(player, currentAmmo, maxAmmo);
+
+        // Atualizar o cache
+        reloadingCache.put(player.getUniqueId(), new CachedReloadingState(false, System.currentTimeMillis()));
+
+        reloadTaskId = -1;
+        reloadSlot = -1;
+        reloadingWeaponId = null;
     }
 
-    public void setReloading(boolean isReloading) {
-        this.isReloading = isReloading;
+    private boolean isWeaponInHand(Player player) {
+        ItemStack item = player.getInventory().getItemInHand();
+        return WeaponUtils.isSameWeapon(item, reloadingWeaponId);
+    }
+
+    public static Map<UUID, Boolean> getIsFiring() {
+        return isFiring;
+    }
+
+    public static Map<UUID, Long> getLastClickTimes() {
+        return lastClickTimes;
+    }
+
+    public void startFiring(Player player) {
+        new BukkitRunnable() {
+            @Override
+            public void run() {
+                if (!isFiring.getOrDefault(player.getUniqueId(), false) || !canShoot(player)) {
+                    isFiring.put(player.getUniqueId(), false);
+                    WeaponUtils.updateWeaponInHand(player, Weapon.this);
+                    cancel();
+                    return;
+                }
+                shoot(player);
+            }
+        }.runTaskTimer(Main.getPlugin(), 0L, (long) (20 / fireRate));
     }
 }

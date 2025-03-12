@@ -3,11 +3,14 @@ package org.esg.weapons;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.esg.models.Weapon;
-import org.esg.utils.NBTUtils;
+import org.esg.utils.WeaponUtils;
 
-public class WeaponManager {
-    public static void giveWeapon(Player player, Weapon weapon){
-        ItemStack item = NBTUtils.applyWeaponNBT(WeaponFactory.toItemStack(weapon), weapon);
+public final class WeaponManager {
+
+    private WeaponManager() {}
+
+    public static void giveWeapon(Player player, Weapon weapon) {
+        ItemStack item = WeaponUtils.applyWeaponToItem(WeaponFactory.toItemStack(weapon), weapon, player);
         player.getInventory().addItem(item);
     }
 }
