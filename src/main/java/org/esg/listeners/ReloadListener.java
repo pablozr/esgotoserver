@@ -1,5 +1,6 @@
 package org.esg.listeners;
 
+import org.bukkit.Material;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
@@ -16,57 +17,60 @@ import org.esg.utils.WeaponUtils;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.logging.Logger;
 
+/**
+ * Listener for handling weapon reload events triggered by player actions.
+ */
 public class ReloadListener implements Listener {
+
+    private static final Logger LOGGER = Logger.getLogger(ReloadListener.class.getName());
+    private static final long RELOAD_COOLDOWN_MS = 500;
+    private static final int INVENTORY_HOTBAR_SIZE = 9;
+    private static final int INVENTORY_TOTAL_SIZE = 36;
+
     private final Map<UUID, Long> lastReloadAttempt = new HashMap<>();
-    private static final long RELOAD_COOLDOWN = 500; // 500ms cooldown entre tentativas de recarga
 
     @EventHandler
     public void onPlayerSneak(PlayerToggleSneakEvent event) {
         if (!event.isSneaking()) return;
 
         Player player = event.getPlayer();
-        UUID playerId = player.getUniqueId();
-        long currentTime = System.currentTimeMillis();
-
-        if (lastReloadAttempt.containsKey(playerId) && (currentTime - lastReloadAttempt.get(playerId)) < RELOAD_COOLDOWN) {
-            return;
-        }
+        if (!canAttemptReload(player)) return;
 
         ItemStack itemInHand = player.getInventory().getItemInHand();
         Weapon weapon = WeaponUtils.getWeaponFromItem(itemInHand, player);
-        if (weapon != null) {
-            if (Weapon.getIsFiring().getOrDefault(player.getUniqueId(), false)) {
-                return;
-            }
-            if (weapon.isReloading(player)) {
-                MessageHandler.sendAlreadyReloading(player);
-                return;
-            }
-            lastReloadAttempt.put(playerId, currentTime);
-            weapon.reload(player);
-        }
+        if (weapon == null || !canReload(player, weapon)) return;
+
+        lastReloadAttempt.put(player.getUniqueId(), System.currentTimeMillis());
+        weapon.reload(player);
     }
 
     @EventHandler
     public void onPlayerSwitchItem(PlayerItemHeldEvent event) {
         Player player = event.getPlayer();
         int previousSlot = event.getPreviousSlot();
+        int newSlot = event.getNewSlot();
 
-        if (previousSlot < 0 || previousSlot > 8) {
-            return;
+        if (isValidSlot(previousSlot)) {
+            ItemStack previousItem = player.getInventory().getItem(previousSlot);
+            if (previousItem != null) {
+                Weapon previousWeapon = WeaponUtils.getWeaponFromItem(previousItem, player);
+                if (previousWeapon != null && previousWeapon.isReloading(player)) {
+                    LOGGER.info("Cancelling reload for weapon in slot " + previousSlot + " with weaponId=" + WeaponUtils.getWeaponId(previousItem));
+                    previousWeapon.cancelReload(player);
+                }
+            }
         }
 
-        ItemStack previousItem = player.getInventory().getItem(previousSlot);
-        Weapon weapon = WeaponUtils.getWeaponFromItem(previousItem, player);
-
-        if (weapon != null && weapon.isReloading(player)) {
-            weapon.cancelReload(player);
-            try {
-                ItemStack updatedItem = WeaponUtils.applyWeaponToItem(previousItem, weapon, player);
-                player.getInventory().setItem(previousSlot, updatedItem);
-            } catch (Exception e) {
-                e.printStackTrace();
+        if (isValidSlot(newSlot)) {
+            ItemStack newItem = player.getInventory().getItem(newSlot);
+            if (newItem != null && newItem.getType() != Material.AIR) {
+                Weapon newWeapon = WeaponUtils.getWeaponFromItem(newItem, player);
+                if (newWeapon != null) {
+                    LOGGER.info("Switched to weapon in slot " + newSlot + " with weaponId=" + WeaponUtils.getWeaponId(newItem) +
+                            ", currentAmmo=" + newWeapon.getCurrentAmmo() + ", isReloading=" + newWeapon.isReloading(player));
+                }
             }
         }
     }
@@ -78,15 +82,7 @@ public class ReloadListener implements Listener {
         Weapon weapon = WeaponUtils.getWeaponFromItem(droppedItem, player);
 
         if (weapon != null && weapon.isReloading(player)) {
-            try {
-                weapon.cancelReload(player);
-                // Forçar atualização do estado no NBT
-                weapon.setReloading(false);
-                ItemStack updatedItem = WeaponUtils.applyWeaponToItem(droppedItem, weapon, player);
-                event.getItemDrop().setItemStack(updatedItem);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+            cancelReloadAndUpdateDroppedItem(player, weapon, event);
         }
     }
 
@@ -98,14 +94,10 @@ public class ReloadListener implements Listener {
         ItemStack item = event.getItem().getItemStack();
         Weapon weapon = WeaponUtils.getWeaponFromItem(item, player);
 
-        if (weapon != null) {
-            // Garantir que o estado seja falso ao pegar
-            if (weapon.isReloading(player)) {
-                weapon.setReloading(false);
-            }
+        if (weapon != null && weapon.isReloading(player)) {
+            weapon.setReloading(false);
             ItemStack updatedItem = WeaponUtils.applyWeaponToItem(item, weapon, player);
             event.getItem().setItemStack(updatedItem);
-
         }
     }
 
@@ -119,8 +111,55 @@ public class ReloadListener implements Listener {
 
         if (weapon == null || !weapon.isReloading(player)) return;
 
+        handleInventoryClick(player, weapon, currentItem, event);
+    }
+
+    private boolean canAttemptReload(Player player) {
+        UUID playerId = player.getUniqueId();
+        Long lastAttempt = lastReloadAttempt.get(playerId);
+        if (lastAttempt == null) return true;
+
+        long currentTime = System.currentTimeMillis();
+        return (currentTime - lastAttempt) >= RELOAD_COOLDOWN_MS;
+    }
+
+    private boolean canReload(Player player, Weapon weapon) {
+        if (Weapon.getIsFiring().getOrDefault(player.getUniqueId(), false)) return false;
+        if (weapon.isReloading(player)) {
+            MessageHandler.sendAlreadyReloading(player);
+            return false;
+        }
+        return true;
+    }
+
+    private boolean isValidSlot(int slot) {
+        return slot >= 0 && slot < INVENTORY_HOTBAR_SIZE;
+    }
+
+    private void cancelReloadAndUpdate(Player player, Weapon weapon, ItemStack item, int slot) {
         weapon.cancelReload(player);
-        weapon.setReloading(false); // Garantir estado falso
+        try {
+            ItemStack updatedItem = WeaponUtils.applyWeaponToItem(item, weapon, player);
+            player.getInventory().setItem(slot, updatedItem);
+        } catch (Exception e) {
+            LOGGER.severe("Failed to update weapon in slot " + slot + " for player " + player.getName() + ": " + e.getMessage());
+        }
+    }
+
+    private void cancelReloadAndUpdateDroppedItem(Player player, Weapon weapon, PlayerDropItemEvent event) {
+        try {
+            weapon.cancelReload(player);
+            weapon.setReloading(false);
+            ItemStack updatedItem = WeaponUtils.applyWeaponToItem(event.getItemDrop().getItemStack(), weapon, player);
+            event.getItemDrop().setItemStack(updatedItem);
+        } catch (Exception e) {
+            LOGGER.severe("Failed to update dropped weapon for player " + player.getName() + ": " + e.getMessage());
+        }
+    }
+
+    private void handleInventoryClick(Player player, Weapon weapon, ItemStack currentItem, InventoryClickEvent event) {
+        weapon.cancelReload(player);
+        weapon.setReloading(false);
         ItemStack updatedItem = WeaponUtils.applyWeaponToItem(currentItem, weapon, player);
 
         if (event.isShiftClick()) {
@@ -140,12 +179,12 @@ public class ReloadListener implements Listener {
 
     private int findDestinationSlot(Player player, int rawSlot) {
         ItemStack[] inventory = player.getInventory().getContents();
-        if (rawSlot >= 0 && rawSlot <= 8) {
-            for (int i = 9; i < inventory.length; i++) {
+        if (rawSlot >= 0 && rawSlot < INVENTORY_HOTBAR_SIZE) {
+            for (int i = INVENTORY_HOTBAR_SIZE; i < INVENTORY_TOTAL_SIZE; i++) {
                 if (inventory[i] == null) return i;
             }
-        } else if (rawSlot >= 9 && rawSlot < inventory.length) {
-            for (int i = 0; i <= 8; i++) {
+        } else if (rawSlot >= INVENTORY_HOTBAR_SIZE && rawSlot < INVENTORY_TOTAL_SIZE) {
+            for (int i = 0; i < INVENTORY_HOTBAR_SIZE; i++) {
                 if (inventory[i] == null) return i;
             }
         }

@@ -1,9 +1,10 @@
-package org.esg.weapons;
+package org.esg.Manager;
 
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.esg.models.Weapon;
 import org.esg.utils.WeaponUtils;
+import org.esg.weapons.WeaponFactory;
 
 public final class WeaponManager {
 

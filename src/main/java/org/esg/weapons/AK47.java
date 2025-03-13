@@ -8,6 +8,6 @@ import org.esg.models.WeaponType;
 public class AK47 extends Weapon {
 
     public AK47() {
-        super("AK47", WeaponType.RIFLE, AmmoType._762MM, 500, 80, 1.0, 30, 60, 80, 80, 2, 1);
+        super("AK47", WeaponType.RIFLE, AmmoType._762MM, 0.1, 80, 0.4, 1, 90, 32, 32, 2, 1);
     }
 }

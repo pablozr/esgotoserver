@@ -4,16 +4,33 @@ import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.esg.models.Weapon;
 
+import java.util.logging.Logger;
+
+/**
+ * Utility class for managing weapon-related item updates and retrieval.
+ */
 public final class WeaponUtils {
 
-    private WeaponUtils() {}
+    private static final Logger LOGGER = Logger.getLogger(WeaponUtils.class.getName());
+
+    private WeaponUtils() {
+        // Construtor privado para evitar instanciação.
+    }
 
     public static void updateWeaponInHand(Player player, Weapon weapon) {
         ItemStack item = player.getInventory().getItemInHand();
         if (item != null) {
-            ItemStack updatedItem = NBTUtils.applyWeaponNBT(item, weapon, player);
-            player.getInventory().setItemInHand(updatedItem);
-            System.out.println("[WeaponUtils] Updated weapon in hand for player " + player.getName() + ": isReloading=" + weapon.isReloading() + ", isFiring=" + Weapon.getIsFiring().getOrDefault(player.getUniqueId(), false));
+            String itemWeaponId = NBTUtils.getWeaponID(item); // Pega o weapon_id do item
+            if (itemWeaponId != null) { // Só atualiza se for uma arma
+                ItemStack updatedItem = NBTUtils.applyWeaponNBT(item, weapon, player);
+                player.getInventory().setItemInHand(updatedItem);
+                LOGGER.info("Arma atualizada para " + player.getName() +
+                        ": recarregando=" + weapon.isReloading() +
+                        ", munição=" + weapon.getCurrentAmmo());
+            } else {
+                LOGGER.info("Atualização pulada para " + player.getName() +
+                        ": item na mão não é uma arma (sem weapon_id)");
+            }
         }
     }
 
@@ -22,12 +39,21 @@ public final class WeaponUtils {
         if (item != null) {
             ItemStack updatedItem = NBTUtils.applyWeaponNBT(item, weapon, player);
             player.getInventory().setItem(slot, updatedItem);
+            LOGGER.info("Updated weapon in slot " + slot + " for player " + player.getName() +
+                    ": isReloading=" + weapon.isReloading() +
+                    ", currentAmmo=" + weapon.getCurrentAmmo());
         }
     }
 
     public static Weapon getWeaponFromItem(ItemStack item, Player player) {
         Weapon weapon = NBTUtils.getWeaponFromNBT(item, player);
-        System.out.println("[WeaponUtils] Got weapon from item for player " + player.getName() + ": " + (weapon != null ? "name=" + weapon.getName() + ", isReloading=" + weapon.isReloading() + ", isFiring from NBT=" + NBTUtils.getIsFiringFromNBT(item, player) : "null"));
+        if (weapon != null) {
+            LOGGER.info("Got weapon from item for player " + player.getName() + ": " +
+                    "name=" + weapon.getName() +
+                    ", currentAmmo=" + weapon.getCurrentAmmo() +
+                    ", isReloading=" + weapon.isReloading() +
+                    ", isFiring from NBT=" + NBTUtils.getIsFiringFromNBT(item, player));
+        }
         return weapon;
     }
 

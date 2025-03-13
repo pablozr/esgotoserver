@@ -8,6 +8,7 @@ import org.bukkit.event.player.PlayerInteractEvent;
 import org.bukkit.event.player.PlayerItemHeldEvent;
 import org.bukkit.inventory.ItemStack;
 import org.esg.models.Weapon;
+import org.esg.utils.NBTUtils;
 import org.esg.utils.WeaponUtils;
 import org.bukkit.scheduler.BukkitRunnable;
 import org.esg.Main;
@@ -15,7 +16,10 @@ import org.esg.Main;
 import java.util.Map;
 import java.util.UUID;
 
+import static net.minecraft.server.v1_8_R3.MinecraftServer.LOGGER;
+
 public class ShootListener implements Listener {
+    private static final long CLICK_COOLDOWN_MS = 150;
     private static final Map<UUID, Boolean> isFiring = Weapon.getIsFiring();
     private static final Map<UUID, Long> lastClickTimes = Weapon.getLastClickTimes();
 
@@ -29,10 +33,8 @@ public class ShootListener implements Listener {
         Weapon weapon = WeaponUtils.getWeaponFromItem(itemInHand, player);
         if (weapon == null) return;
 
-        // Chama o método shoot diretamente para garantir feedback em cada clique
         weapon.shoot(player);
 
-        // Inicia ou continua o disparo contínuo apenas se o jogador puder atirar
         if (weapon.canShoot(player)) {
             isFiring.put(playerUUID, true);
             lastClickTimes.put(playerUUID, System.currentTimeMillis());
@@ -43,7 +45,6 @@ public class ShootListener implements Listener {
                 public void run() {
                     if (!isFiring.getOrDefault(playerUUID, false)) {
                         lastClickTimes.remove(playerUUID);
-                        WeaponUtils.updateWeaponInHand(player, weapon);
                         cancel();
                         return;
                     }
@@ -52,7 +53,6 @@ public class ShootListener implements Listener {
                         System.out.println("[ShootListener] Canceling firing due to reloading for player: " + player.getName());
                         isFiring.put(playerUUID, false);
                         lastClickTimes.remove(playerUUID);
-                        WeaponUtils.updateWeaponInHand(player, weapon);
                         cancel();
                         return;
                     }
@@ -62,7 +62,6 @@ public class ShootListener implements Listener {
                     if (currentTime - lastClick > 100) {
                         isFiring.put(playerUUID, false);
                         lastClickTimes.remove(playerUUID);
-                        WeaponUtils.updateWeaponInHand(player, weapon);
                         cancel();
                     }
                 }
@@ -74,10 +73,34 @@ public class ShootListener implements Listener {
     public void onPlayerItemHeld(PlayerItemHeldEvent event) {
         Player player = event.getPlayer();
         UUID playerUUID = player.getUniqueId();
+
+
         isFiring.put(playerUUID, false);
-        Weapon weapon = WeaponUtils.getWeaponFromItem(player.getInventory().getItemInHand(), player);
-        if (weapon != null) {
-            WeaponUtils.updateWeaponInHand(player, weapon);
+
+        ItemStack previousItem = player.getInventory().getItem(event.getPreviousSlot());
+        if (previousItem != null) {
+            Weapon previousWeapon = WeaponUtils.getWeaponFromItem(previousItem, player);
+            if (previousWeapon != null) {
+                if (previousWeapon.isReloading(player)) {
+                    previousWeapon.cancelReload(player);
+                }
+                WeaponUtils.updateWeaponInSlot(player, event.getPreviousSlot(), previousWeapon); // Salva o estado
+                LOGGER.info("Estado da arma anterior salvo no slot " + event.getPreviousSlot() + ": currentAmmo=" + previousWeapon.getCurrentAmmo());
+            }
+        }
+
+        ItemStack newItem = player.getInventory().getItem(event.getNewSlot());
+        if (newItem != null) {
+            String newItemWeaponId = NBTUtils.getWeaponID(newItem);
+            if (newItemWeaponId != null) {
+                Weapon newWeapon = WeaponUtils.getWeaponFromItem(newItem, player);
+                if (newWeapon != null) {
+                    LOGGER.info("Jogador " + player.getName() + " trocou para a arma " + newWeapon.getName() +
+                            " no slot " + event.getNewSlot() + " com currentAmmo=" + newWeapon.getCurrentAmmo());
+                }
+            } else {
+                LOGGER.info("Jogador " + player.getName() + " trocou para um item que não é arma no slot " + event.getNewSlot());
+            }
         }
     }
 }
